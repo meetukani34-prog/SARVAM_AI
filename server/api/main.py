@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import os
 from database.core import create_tables, get_db, Base, engine
-from api.routes import auth, ai_services, career, dashboard, env
+from api.routes import auth, ai_services, career, dashboard, env, openenv
 from api.routes import history as history_route
 import database.temporal_anchor  # noqa: F401 — registers models with SQLAlchemy
 import traceback
@@ -47,7 +47,7 @@ app.include_router(career.router,             prefix="/api/career",    tags=["Ca
 app.include_router(dashboard.router,          prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(env.router,                prefix="/api/env",       tags=["SARVAM OpenEnv"])
 app.include_router(env.router,                tags=["SARVAM OpenEnv Root Alias"])  # Added to fix /reset 405 error
-app.include_router(env.router,                prefix="/openenv",      tags=["SARVAM OpenEnv OpenAI Alias"])  # Added for OpenEnv compatibility
+app.include_router(openenv.router,           prefix="/openenv",      tags=["SARVAM OpenEnv OpenAI Alias"])  # Dedicated OpenEnv router
 app.include_router(history_route.router)  # Temporal Anchor — /api/history/*
 
 # ── WebSockets ────────────────────────────────────────────────────────────────
