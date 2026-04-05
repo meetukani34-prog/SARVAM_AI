@@ -9,10 +9,14 @@ from env.logic import run_auto_grader
 router = APIRouter()
 
 @router.post("/reset", response_model=ObservationModel)
-def reset_environment(req: ResetRequest):
+def reset_environment(
+    orbit: int = Query(1, description="Orbit value (1=CHAOS_CONTROL, 2=NARRATIVE_SHIFT, 3=STRATEGIC_PIVOT)"),
+    session_id: Optional[str] = Query(None, description="Optional session ID")
+):
+    """Reset the environment. Accepts orbit and session_id via query parameters."""
     try:
-        orbit_enum = Orbit(req.orbit)
-        env = create_session(orbit=orbit_enum, session_id=req.session_id)
+        orbit_enum = Orbit(orbit)
+        env = create_session(orbit=orbit_enum, session_id=session_id)
         return env.reset(orbit_enum)
     except Exception as e: raise HTTPException(status_code=400, detail=str(e))
 
