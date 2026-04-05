@@ -61,37 +61,54 @@ class BaselinePolicy:
     """The 'Kinetic Policy' — handles the decision-making loop via LLM."""
     
     def __init__(self, model_name: str = "meta/llama-3.1-8b-instruct"):
-        self.client = OpenAI(
-            api_key=os.getenv("NVIDIA_API_KEY"),
-            base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
-        )
         self.model_name = model_name
         self.planner = DriftingPlanner()
+        self.client = None
+        
+        # Gracefully handle missing API keys for validation/testing
+        api_key = os.getenv("NVIDIA_API_KEY")
+        if api_key:
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
+            )
+        else:
+            print("[WARN] [Agent]: NVIDIA_API_KEY not set. Running in deterministic mode.")
 
     def select_action(self, obs: ObservationModel, info: Dict[str, Any]) -> ActionModel:
         """Call the LLM to decide the next kinetic drift."""
         prompt = self.planner.generate_prompt(obs, info.get("orbit_label", "Life Coaching"))
         
-        # 🥇 Forge 2-step optimal strategy (Chaos Control Only)
+        # [OPTIMAL] Forge 2-step optimal strategy (Chaos Control Only)
         if obs.orbit == Orbit.CHAOS_CONTROL:
             if obs.step == 0:
-                print(f"🤖 [Agent]: Focus alignment initiated. Prioritizing deep work window.")
+                print(f"[AGENT] [Agent]: Focus alignment initiated. Prioritizing deep work window.")
                 return ActionModel(
-                    action_type=ActionType.SCHEDULE_DEEP_WORK, # Ensures progression towards 2.0 hrs
+                    action_type=ActionType.SCHEDULE_DEEP_WORK,
                     target_metric=TargetMetric.FOCUS,
                     intensity=Intensity.DEEP,
                     duration_mins=60,
                     note="FOCUS_ALIGNMENT"
                 )
             elif obs.step == 1:
-                print(f"🤖 [Agent]: Deep work execution in progress. Crystallizing focus window.")
+                print(f"[AGENT] [Agent]: Deep work execution in progress. Crystallizing focus window.")
                 return ActionModel(
-                    action_type=ActionType.SCHEDULE_DEEP_WORK, # Hits the 2.0 hrs goal
+                    action_type=ActionType.SCHEDULE_DEEP_WORK,
                     target_metric=TargetMetric.PRODUCTIVITY,
                     intensity=Intensity.DEEP,
                     duration_mins=120,
                     note="DEEP_WORK_EXECUTION"
                 )
+
+        # Fallback to deterministic action if API is unavailable
+        if not self.client:
+            return ActionModel(
+                action_type=ActionType.SCHEDULE_DEEP_WORK,
+                target_metric=TargetMetric.CAREER,
+                intensity=Intensity.MODERATE,
+                duration_mins=45,
+                note="DETERMINISTIC_FALLBACK"
+            )
 
         response = self.client.chat.completions.create(
             model=self.model_name,
@@ -107,7 +124,7 @@ class BaselinePolicy:
         data = json.loads(raw_json)
         
         # Log reasoning to console
-        print(f"🤖 [Agent]: {data.get('reasoning', 'Drifting...')}")
+        print(f"[AGENT] [Agent]: {data.get('reasoning', 'Drifting...')}")
         
         return ActionModel(
             action_type=ActionType(data["action_type"].lower()),
