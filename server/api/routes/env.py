@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body, Request
 from typing import Optional, Dict, Any
+import json
 
 from env.schemas import Orbit, ObservationModel, EnvState, ActionModel
 from models.schemas import ResetRequest, StepRequest, StepResult
@@ -9,12 +10,23 @@ from env.logic import run_auto_grader
 router = APIRouter()
 
 @router.post("/reset", response_model=ObservationModel)
-def reset_environment(
+async def reset_environment(
+    request: Request,
     orbit: int = Query(1, description="Orbit value (1=CHAOS_CONTROL, 2=NARRATIVE_SHIFT, 3=STRATEGIC_PIVOT)"),
     session_id: Optional[str] = Query(None, description="Optional session ID")
 ):
-    """Reset the environment. Accepts orbit and session_id via query parameters."""
+    """Reset the environment. Accepts orbit and session_id via query parameters or JSON body."""
     try:
+        # Try to read JSON body if provided
+        try:
+            body = await request.json()
+            if "orbit" in body:
+                orbit = body["orbit"]
+            if "session_id" in body:
+                session_id = body["session_id"]
+        except:
+            pass  # No body or invalid JSON, use query params
+        
         orbit_enum = Orbit(orbit)
         env = create_session(orbit=orbit_enum, session_id=session_id)
         return env.reset(orbit_enum)

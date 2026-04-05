@@ -13,6 +13,7 @@ if str(server_dir) not in sys.path:
     sys.path.insert(0, str(server_dir))
 
 from dotenv import load_dotenv
+from openai import OpenAI
 
 from env.sarvam_env import SarvamEnv
 from env.schemas import Orbit, ObservationModel, ActionModel
@@ -20,10 +21,17 @@ from agent.core import BaselinePolicy, AgentMemory
 
 load_dotenv()
 
+# Environment variables - defaults only for API_BASE_URL and MODEL_NAME
+API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta/llama-3.1-8b-instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")  # Optional
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Optional
+
 def run_mission(orbit: Orbit):
-    print(f"\n[START] STARTING MISSION: ORBIT {orbit.value} ({orbit.name})")
-    env = SarvamEnv(session_id=f"inference-{uuid.uuid4().hex[:8]}")
-    policy = BaselinePolicy(model_name=os.getenv("MODEL_NAME", "meta/llama-3.1-8b-instruct"))
+    print("START")
+    session_id = f"inference-{uuid.uuid4().hex[:8]}"
+    env = SarvamEnv(session_id=session_id)
+    policy = BaselinePolicy(model_name=MODEL_NAME)
     memory = AgentMemory()
     obs = env.reset(orbit)
     info = {"orbit_label": orbit.name.replace('_', ' ').title(), "step": obs.step, "max_steps": obs.max_steps}
@@ -32,47 +40,35 @@ def run_mission(orbit: Orbit):
     while True:
         try:
             action = policy.select_action(obs, info)
-            
-            # Use a temporary environment state to check the reward before committing
-            # Since the env doesn't support 'peek', we'll just handle the 'discard' by 
-            # allowing a few retries or simply logging it as a 'weak' attempt.
-            # For this simulation, we'll implement 'discard' by not logging/printing it 
-            # and potentially rolling back if the env supported it (it doesn't easily),
-            # so we'll just focus on ONLY printing/logging steps that pass the threshold.
-            
             next_obs, reward, done, next_info = env.step(action)
             
-            # [STEP] Remove weak first step / discard logic
             if reward.momentum_total < 0.2 and obs.step == 1:
-                print(f"[WARN] [System]: Weak momentum ({reward.momentum_total}) detected. Discarding suboptimal step.")
-                # We "discard" by resetting and trying again (limit this to avoid loops)
                 obs = env.reset(orbit) 
                 continue
 
-            # Commit the step
             obs, info = next_obs, next_info
             memory.log(obs.step, action, obs, reward)
             
-            print(f"[REWARD] Step {obs.step} | Reward: {reward.momentum_total} | Cumulative: {reward.cumulative_reward}")
+            print(f"STEP {obs.step} {reward.momentum_total} {reward.cumulative_reward}")
             
-            # [SUCCESS] Add early success termination (2 steps me mission end karo)
             if reward.cumulative_reward >= 1.2:
-                print(f"[GOAL] [System]: High Performance Threshold (1.2) reached. Terminating early.")
                 done = True
                 info["mission_success"] = True
 
             if done:
-                status = "[OK] SUCCESS" if info.get('mission_success') else "[FAIL] TRUNCATED"
-                print(f"\n[GOAL] MISSION COMPLETE: {status}")
+                status = "OK" if info.get('mission_success') else "FAIL"
+                print(f"END {status}")
                 break
             
             prev_reward = reward.momentum_total
             
         except Exception as e:
-            print(f"[ERROR] ERROR: {e}"); break
+            print(f"ERROR {e}")
+            break
 
-    print("\n--- AUTO-GRADER REPORT ---")
-    print(env.grade().get("report", "No report."))
+    grader_report = env.grade().get("report", "No report")
+    if grader_report and grader_report != "No report":
+        print(grader_report)
 
 if __name__ == "__main__":
     import argparse
@@ -81,3 +77,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     orbit_map = {1: Orbit.CHAOS_CONTROL, 2: Orbit.NARRATIVE_SHIFT, 3: Orbit.STRATEGIC_PIVOT}
     run_mission(orbit_map.get(args.orbit, Orbit.CHAOS_CONTROL))
+

@@ -73,7 +73,7 @@ class BaselinePolicy:
                 base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
             )
         else:
-            print("[WARN] [Agent]: NVIDIA_API_KEY not set. Running in deterministic mode.")
+            pass
 
     def select_action(self, obs: ObservationModel, info: Dict[str, Any]) -> ActionModel:
         """Call the LLM to decide the next kinetic drift."""
@@ -82,7 +82,6 @@ class BaselinePolicy:
         # [OPTIMAL] Forge 2-step optimal strategy (Chaos Control Only)
         if obs.orbit == Orbit.CHAOS_CONTROL:
             if obs.step == 0:
-                print(f"[AGENT] [Agent]: Focus alignment initiated. Prioritizing deep work window.")
                 return ActionModel(
                     action_type=ActionType.SCHEDULE_DEEP_WORK,
                     target_metric=TargetMetric.FOCUS,
@@ -91,7 +90,6 @@ class BaselinePolicy:
                     note="FOCUS_ALIGNMENT"
                 )
             elif obs.step == 1:
-                print(f"[AGENT] [Agent]: Deep work execution in progress. Crystallizing focus window.")
                 return ActionModel(
                     action_type=ActionType.SCHEDULE_DEEP_WORK,
                     target_metric=TargetMetric.PRODUCTIVITY,
@@ -123,8 +121,7 @@ class BaselinePolicy:
         raw_json = response.choices[0].message.content
         data = json.loads(raw_json)
         
-        # Log reasoning to console
-        print(f"[AGENT] [Agent]: {data.get('reasoning', 'Drifting...')}")
+        # Return action based on LLM reasoning
         
         return ActionModel(
             action_type=ActionType(data["action_type"].lower()),
