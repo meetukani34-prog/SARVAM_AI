@@ -1,5 +1,8 @@
 import os
 from huggingface_hub import HfApi, CommitOperationAdd
+from dotenv import load_dotenv
+
+load_dotenv()
 
 t = os.environ.get("HF_TOKEN", "hf_PlaceholderTokenForGitHub")
 r = "Meetukani/sarvam-dashboard"
