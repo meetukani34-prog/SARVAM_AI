@@ -10,6 +10,10 @@ target_files = [
     "server/api/routes/auth.py",
     "server/api/routes/ai_services.py",
     "server/api/routes/career.py",
+    "server/api/routes/dashboard.py",
+    "server/api/routes/env.py",
+    "server/api/routes/history.py",
+    "server/api/routes/openenv.py",
     "server/api/main.py",
     "client/src/pages/Dashboard.jsx",
     "client/src/pages/ResumeAnalyzer.jsx",
@@ -34,6 +38,7 @@ target_files = [
     "server/database/__init__.py",
     "server/env/__init__.py",
     "server/models/__init__.py",
+    "server/models/schemas.py",
     "server/services/__init__.py",
     "client/.env",
     "client/src/pages/Login.jsx"
