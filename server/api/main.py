@@ -14,6 +14,7 @@ import database.temporal_anchor  # noqa: F401 — registers models with SQLAlche
 import traceback
 from services.socket_manager import manager
 from services.analytics import get_live_metrics
+import uvicorn
 
 app = FastAPI(
     title="SARVAM API",
@@ -121,3 +122,10 @@ try:
         )
 except Exception as e:
     print(f"⚠️ Static content mount skipped: {e}")
+
+def start():
+    """Entry point for the 'server' command."""
+    uvicorn.run("api.main:app", host="0.0.0.0", port=7860, reload=False)
+
+if __name__ == "__main__":
+    start()

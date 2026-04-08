@@ -46,7 +46,8 @@ target_files = [
     "client/.env",
     "client/src/pages/Login.jsx",
     "openenv.yaml",
-    "pyproject.toml"
+    "pyproject.toml",
+    "uv.lock"
 ]
 
 ops = []
@@ -61,7 +62,7 @@ api.create_commit(
     repo_id=r,
     repo_type="space",
     operations=ops,
-    commit_message="V8.6: Added missing pyproject.toml for multi-mode deployment",
+    commit_message="V8.7: Finalized multi-mode deployment with uv.lock and entry points",
     token=t
 )
 
@@ -81,10 +82,10 @@ def clear_set(key, value, type="var"):
     else:
         api.add_space_secret(repo_id=r, key=key, value=value, token=t)
 
-clear_set("BUILD_ID", "V8_6_PYPROJECT_FIX", "var")
+clear_set("BUILD_ID", "V8_7_MULTIMODE_FIX", "var")
 clear_set("GOOGLE_CLIENT_ID", "841476632281-a8sa47cfc04vn0vn7i5rotn1moiejpp2.apps.googleusercontent.com", "secret")
 clear_set("SECRET_KEY", "sarvam-auth-v8-luminous-integrity-alpha-99", "secret")
 
 # Force factory reboot
 api.restart_space(repo_id=r, token=t, factory_reboot=True)
-print("SUCCESS: V8.6 DEPLOYED: Added pyproject.toml and reboot triggered.")
+print("SUCCESS: V8.7 DEPLOYED: Finalized and reboot triggered.")
