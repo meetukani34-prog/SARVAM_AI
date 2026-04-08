@@ -56,12 +56,12 @@ api.create_commit(
     repo_id=r,
     repo_type="space",
     operations=ops,
-    commit_message="V8.3: Removed Google OAuth missing Client ID error message",
+    commit_message="V8.4: Successfully removed Google OAuth entry points from Login UI",
     token=t
 )
 
 # Set Space Variables & Secrets (with Collision Handling)
-print("⚙️ Updating Space configuration...")
+print("[CONFIG] Updating Space configuration...")
 
 def clear_set(key, value, type="var"):
     try:
@@ -76,10 +76,10 @@ def clear_set(key, value, type="var"):
     else:
         api.add_space_secret(repo_id=r, key=key, value=value, token=t)
 
-clear_set("BUILD_ID", "V8_3_CLEAN_AUTH", "var")
+clear_set("BUILD_ID", "V8_4_HIDDEN_AUTH", "var")
 clear_set("GOOGLE_CLIENT_ID", "841476632281-a8sa47cfc04vn0vn7i5rotn1moiejpp2.apps.googleusercontent.com", "secret")
 clear_set("SECRET_KEY", "sarvam-auth-v8-luminous-integrity-alpha-99", "secret")
 
 # Force factory reboot
 api.restart_space(repo_id=r, token=t, factory_reboot=True)
-print("🚀 V8.1 DEPLOYED: Google Login fix (Collision Cleared) and reboot triggered.")
+print("SUCCESS: V8.4 DEPLOYED: Google Login hidden and reboot triggered.")
