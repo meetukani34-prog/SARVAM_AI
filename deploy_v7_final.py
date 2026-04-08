@@ -1,4 +1,5 @@
 import os
+from huggingface_hub import HfApi, CommitOperationAdd
 
 t = os.environ.get("HF_TOKEN", "hf_PlaceholderTokenForGitHub")
 r = "Meetukani/sarvam-dashboard"
@@ -22,6 +23,7 @@ target_files = [
     "client/src/pages/CareerRoadmap.jsx",
     "client/src/pages/CodeOracle.jsx",
     "client/src/services/api.js",
+    "inference.py",
     "server/database/core.py",
     ".gitignore",
     "server/env/logic.py",

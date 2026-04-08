@@ -46,6 +46,7 @@ app.include_router(ai_services.router,        prefix="/api/ai",        tags=["AI
 app.include_router(career.router,             prefix="/api/career",    tags=["Career Growth Engine"])
 app.include_router(dashboard.router,          prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(env.router,                prefix="/api/env",       tags=["SARVAM OpenEnv"])
+app.include_router(env.router,                tags=["SARVAM OpenEnv Root Alias"])  # Added to fix /reset 405 error
 app.include_router(history_route.router)  # Temporal Anchor — /api/history/*
 
 # ── WebSockets ────────────────────────────────────────────────────────────────
