@@ -1,0 +1,9 @@
+name: sarvam
+version: 1.2.0
+type: environment
+entrypoint: inference.py
+dockerfile: Dockerfile
+description: "SARVAM: The AI Career Accelerator Environment"
+capabilities:
+  - gymnasium_api
+  - rest_api
