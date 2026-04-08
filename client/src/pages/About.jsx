@@ -102,7 +102,7 @@ export default function About() {
             <p style={{ color: 'var(--text-muted)' }}>Fill out the form below and we'll get back to you as soon as possible.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="form-grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <form onSubmit={handleSubmit} className="grid-2 responsive-grid" style={{ gap: '24px' }}>
             <div style={{ gridColumn: 'span 2' }}>
               <label style={labelStyle}>Full Name *</label>
               <input 

@@ -193,19 +193,20 @@ export default function Planner() {
   return (
     <>
       <div className="page-content anim-fade">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }} className="anim-fade">
-          <div>
-            <h1 className="page-title">{mode === 'daily' ? '📅 Daily' : '🗓️ Weekly'} <span className="gradient-text">Planner</span></h1>
-            <p className="page-subtitle">{mode === 'daily' ? formatDate() : `Strategic Outlook · Week of ${plan?.date || 'Loading...'}`}</p>
+        <div className="planner-header-container anim-fade" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+          <div className="planner-title-block">
+            <h1 className="page-title title-responsive">{mode === 'daily' ? '📅 Daily' : '🗓️ Weekly'} <span className="gradient-text">Planner</span></h1>
+            <p className="page-subtitle text-responsive">{mode === 'daily' ? formatDate() : `Strategic Outlook · Week of ${plan?.date || 'Loading...'}`}</p>
           </div>
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div className="planner-actions-block" style={{ display: 'flex', gap: '16px', alignItems: 'center', flexShrink: 0 }}>
+            {/* NEW: Button first on mobile for prominence */}
+            <button className="btn btn-primary" onClick={() => setShowAdd(true)} style={{ height: '44px', padding: '0 24px' }}>
+              <span style={{ fontSize: '1.2rem', marginRight: '4px' }}>+</span> New
+            </button>
             <div className="tab-switcher">
               <button className={mode === 'daily' ? 'active' : ''} onClick={() => setMode('daily')}>Daily</button>
               <button className={mode === 'weekly' ? 'active' : ''} onClick={() => setMode('weekly')}>Weekly</button>
             </div>
-            <button className="btn btn-primary" onClick={() => setShowAdd(true)} style={{ height: '44px', padding: '0 24px' }}>
-              <span style={{ fontSize: '1.2rem', marginRight: '4px' }}>+</span> New Task
-            </button>
           </div>
         </div>
 

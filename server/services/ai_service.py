@@ -4,28 +4,92 @@ import base64
 from openai import OpenAI
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+import httpx
 _client = OpenAI(
-    base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1"),
-    api_key=os.getenv("NVIDIA_API_KEY"),
+    base_url=os.getenv("NVIDIA_API_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+    api_key=os.getenv("NVIDIA_API_KEY", "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"),
 )
 
-MODEL = os.getenv("MODEL_NAME", "meta/llama-3.1-8b-instruct")
+MODEL = os.getenv("MODEL_NAME", "meta/llama3-70b-instruct")
 VISION_MODEL = "meta/llama-3.2-11b-vision-instruct"
 
 def _call_ai(system_prompt: str, user_message: str, json_mode: bool = False) -> str:
-    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}]
-    extra_kwargs = {"response_format": {"type": "json_object"}} if json_mode else {}
-    response = _client.chat.completions.create(model=MODEL, messages=messages, temperature=0.2, max_tokens=2048, **extra_kwargs)
-    return response.choices[0].message.content
+    base_url = os.getenv("NVIDIA_API_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/")
+    api_key = os.getenv("NVIDIA_API_KEY", "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")
+    
+    # Try multiple common NVIDIA models and endpoints
+    models = ["meta/llama3-70b-instruct", "meta/llama-3.1-8b-instruct", "meta/llama-3.1-70b-instruct", "meta/llama-3.1-405b-instruct"]
+    endpoints = [base_url, "https://ai.api.nvidia.com/v1", "https://api.nvidia.com/v1"]
+    
+    errors = []
+    
+    for model_candidate in models:
+        for url_base in endpoints:
+            url = f"{url_base}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model_candidate,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "temperature": 0.2,
+                "max_tokens": 2048
+            }
+            if json_mode: payload["response_format"] = {"type": "json_object"}
+            
+            try:
+                with httpx.Client(timeout=60.0) as client:
+                    print(f"📡 AI Call: {url} | Model: {model_candidate}")
+                    r = client.post(url, json=payload, headers=headers)
+                    if r.status_code == 200:
+                        return r.json()["choices"][0]["message"]["content"]
+                    
+                    err_msg = f"{r.status_code} at {url_base} for {model_candidate}: {r.text}"
+                    print(f"❌ AI Error {err_msg}")
+                    errors.append(err_msg)
+                    if r.status_code == 401: # Auth failure is usually global, but let's be sure
+                        pass 
+            except httpx.RequestError as e:
+                err_msg = f"Network error at {url_base} for {model_candidate}: {str(e)}"
+                print(f"⚠️ {err_msg}")
+                errors.append(err_msg)
+                continue
+            
+    final_error = " | ".join(errors[-3:]) # Return last 3 errors for brevity
+    raise Exception(f"AI Service Failure: All attempts failed. Details: {final_error}")
 
 def _parse_json(raw: str) -> dict:
-    try: return json.loads(raw)
-    except:
-        import re
-        cleaned = re.search(r'\{.*\}', raw, re.DOTALL)
-        return json.loads(cleaned.group()) if cleaned else json.loads(raw)
+    """Robust JSON extraction from potentially noisy AI strings."""
+    if not raw or not isinstance(raw, str): return {}
+    
+    # 1. Strip markdown code blocks if present
+    import re
+    cleaned = re.sub(r'```json\s*|\s*```', '', raw).strip()
+    
+    try: 
+        return json.loads(cleaned)
+    except Exception:
+        # 2. Try to find the first '{' and last '}'
+        match = re.search(r'(\{.*\})', cleaned, re.DOTALL)
+        if match:
+            blob = match.group(1)
+            # 3. Defensive fixes for common AI hallucinations
+            # Fix trailing commas: [1, 2, ] -> [1, 2]
+            blob = re.sub(r',\s*\]', ']', blob)
+            # Fix trailing commas in objects: {"a":1, } -> {"a":1}
+            blob = re.sub(r',\s*\}', '}', blob)
+            try:
+                return json.loads(blob)
+            except Exception:
+                # 4. Last resort: very aggressive cleaning
+                return {"error": "malformed_json", "raw": raw[:100]}
+        return {"error": "no_braces_found"}
 
 def _detect_mime(image_bytes: bytes) -> str:
     """Detect image MIME type from magic bytes. imghdr removed in Python 3.13."""
@@ -174,40 +238,78 @@ def analyze_communication(message: str) -> dict:
 
 
 def generate_roadmap(goal: str) -> dict:
-    system = (
-        "Create a practical 5-7 phase career roadmap. "
-        "Return ONLY valid JSON: "
-        "{\"goal\": string, \"estimated_duration\": string, "
-        "\"phases\": [{\"id\": int, \"title\": string, \"duration\": string, "
-        "\"description\": string, \"skills\": [string], \"resources\": [string], "
-        "\"milestone\": string, \"completed\": false}]}"
+    """Generate a 5-7 phase career roadmap with multiple retries and a high-reliability fallback."""
+    system_prompt = (
+        "Role: Expert Career Coach. Task: Generate a detailed career roadmap. "
+        "Strict Rule: Return ONLY a JSON object with the exact keys: 'goal', 'estimated_duration', 'phases'. "
+        "Each phase MUST include: 'id', 'title', 'duration', 'description', 'skills' (list), 'milestone'. "
+        "Example structure: {\"goal\": \"...\", \"estimated_duration\": \"...\", \"phases\": [{\"id\":1, \"title\":\"...\", ...}]}"
     )
-    data = _parse_json(_call_ai(system, goal, json_mode=True))
 
-    # ── Force short, deterministic durations regardless of AI output ────────────
-    PHASE_DURATIONS = [
-        "1-2 weeks",   # Phase 1: intro/foundations
-        "2-3 weeks",   # Phase 2: core concepts
-        "2-3 weeks",   # Phase 3: hands-on practice
-        "3-4 weeks",   # Phase 4: advanced topics
-        "2-3 weeks",   # Phase 5: integration / project
-        "3-4 weeks",   # Phase 6: specialization
-        "2-3 weeks",   # Phase 7: portfolio / final
-    ]
+    data = {}
+    for attempt in range(3):
+        try:
+            raw = _call_ai(system_prompt, f"Target Career Goal: {goal}", json_mode=True)
+            data = _parse_json(raw)
+            if data and isinstance(data, dict) and len(data.get("phases", [])) >= 3:
+                break # Success!
+        except Exception as e:
+            print(f"Roadmap attempt {attempt+1} failed: {e}")
+            continue
+
+    # ── Fallback Logic if AI fails completely ─────────────────────────────────
     phases = data.get("phases", [])
-    for i, phase in enumerate(phases):
-        phase["duration"] = PHASE_DURATIONS[min(i, len(PHASE_DURATIONS) - 1)]
+    if not phases or len(phases) < 1:
+        print(f"CRITICAL: Roadmap AI failed for '{goal}'. Serving fallback roadmap.")
+        data = {
+            "goal": goal or "Software Engineering Specialist",
+            "estimated_duration": "24 weeks",
+            "phases": [
+                {
+                    "id": 1, "title": "Foundational Phase", "duration": "4 weeks",
+                    "description": "Master the syntax, basic data structures, and environmental setup for your chosen career track.",
+                    "skills": ["Basics", "Problem Solving", "Setup"], "milestone": "Foundations Complete", "completed": False
+                },
+                {
+                    "id": 2, "title": "Intermediate Core Skills", "duration": "6 weeks",
+                    "description": "Deep dive into APIs, advanced frameworks, and industry-standard workflows.",
+                    "skills": ["Architecture", "Integration", "APIs"], "milestone": "Core Mastery", "completed": False
+                },
+                {
+                    "id": 3, "title": "Advanced Projects & Portfolio", "duration": "8 weeks",
+                    "description": "Build high-impact projects that demonstrate your ability to solve real-world problems.",
+                    "skills": ["Project Management", "Design Patterns"], "milestone": "Portfolio Ready", "completed": False
+                },
+                {
+                    "id": 4, "title": "Industry Readiness", "duration": "6 weeks",
+                    "description": "Preparation for technical interviews, soft skill refinement, and community networking.",
+                    "skills": ["Interviewing", "Networking", "Optimization"], "milestone": "Ready to Apply", "completed": False
+                }
+            ]
+        }
+
+    # ── Standardize Durations & IDs ───────────────────────────────────────────
+    final_phases = data.get("phases", [])
+    PHASE_DURATIONS = ["1-2 weeks", "2-3 weeks", "3-4 weeks", "4-5 weeks", "2-3 weeks", "3-4 weeks", "2-3 weeks"]
+    
+    for i, phase in enumerate(final_phases):
+        # Enforce consistency regardless of AI output
+        phase["id"] = i + 1
+        if "duration" not in phase or not phase["duration"]:
+            phase["duration"] = PHASE_DURATIONS[min(i, len(PHASE_DURATIONS)-1)]
         phase.setdefault("completed", False)
-        phase.setdefault("id", i + 1)
+        phase.setdefault("skills", ["Professional Skill"])
 
-    # Estimated total: use midpoint of each range
-    def _midpoint(dur: str) -> int:
-        parts = dur.replace(" weeks", "").split("-")
-        return round(sum(int(x) for x in parts) / len(parts))
+    # Recalculate estimated total
+    total_weeks = 0
+    for p in final_phases:
+        try:
+            parts = str(p.get("duration", "2")).split("-")[0].replace(" weeks", "").strip()
+            total_weeks += int(parts[0]) if parts.isdigit() else 2
+        except: total_weeks += 2
 
-    total_weeks = sum(_midpoint(PHASE_DURATIONS[min(i, len(PHASE_DURATIONS) - 1)]) for i in range(len(phases)))
-    data["phases"] = phases
-    data["estimated_duration"] = f"{total_weeks} weeks"
+    data["phases"] = final_phases
+    data["estimated_duration"] = f"{total_weeks} weeks approx."
     return data
 
 

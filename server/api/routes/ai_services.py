@@ -4,7 +4,7 @@ import os
 import httpx
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -19,9 +19,25 @@ from services.analytics import get_live_metrics
 
 router = APIRouter()
 
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
-NVIDIA_BASE_URL = os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "meta/llama-3.1-8b-instruct")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY") or os.getenv("NVIDIA_MLAT", "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")
+NVIDIA_BASE_URL = os.getenv("NVIDIA_API_BASE_URL", "https://integrate.api.nvidia.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta/llama3-70b-instruct")
+
+@router.get("/ping")
+def ping_ai(): return {"status": "AI Router Active"}
+
+@router.get("/models")
+def list_available_models():
+    """Diagnostic route to list all models available to the current NVIDIA_API_KEY."""
+    if not NVIDIA_API_KEY:
+        return {"error": "NVIDIA_API_KEY is missing"}
+    
+    try:
+        from services.ai_service import _client
+        models = _client.models.list()
+        return {"available_models": [m.id for m in models.data]}
+    except Exception as e:
+        return {"error": str(e), "suggestion": "Check if API key is valid and has permission to list models."}
 
 
 def _session_to_dict(s: CoachSession) -> dict:
@@ -47,16 +63,57 @@ class CodeRefineRequest(BaseModel):
 @router.post("/oracle/refine")
 async def refine_code(req: CodeRefineRequest, current_user=Depends(get_current_user)):
     if not NVIDIA_API_KEY: raise HTTPException(status_code=503, detail="NVIDIA_API_KEY missing")
-    system = f"Refine this {req.language} code."
-    payload = {"model": MODEL_NAME, "messages": [{"role": "system", "content": system}, {"role": "user", "content": req.code}], "stream": True}
-    headers = {"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"}
+    system = (
+        f"You are the Cognitive Code Oracle. Directly refine the provided {req.language} code.\n"
+        "Strict Formatting:\n"
+        "1. No preamble. No markdown code blocks (```).\n"
+        "2. Provide refined code immediately.\n"
+        "3. Delimiter: Provide '--- EXPLANATIONS ---' on a new line after the code.\n"
+        "4. Annotations: Provide line-by-line notes after the delimiter using: '• Line X: Description'.\n"
+        "Acknowledge this and begin response with the code."
+    )
 
+    models_to_try = [MODEL_NAME, "meta/llama-3.1-8b-instruct", "meta/llama-3.1-70b-instruct"]
+    
     async def stream():
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream("POST", f"{NVIDIA_BASE_URL}/chat/completions", json=payload, headers=headers) as r:
-                async for line in r.aiter_lines():
-                    if line.startswith("data: "): yield f"{line}\n\n"
-    return StreamingResponse(stream(), media_type="text/event-stream")
+        # Protocol Heartbeat: force cloud proxy buffer open with initial data
+        yield "data: {\"choices\":[{\"delta\":{\"content\":\". \"}}]}\n\n"
+        
+        headers = {"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"}
+        
+        last_error = None
+        for model in models_to_try:
+            payload = {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": req.code}], "stream": True}
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    async with client.stream("POST", f"{NVIDIA_BASE_URL}/chat/completions", json=payload, headers=headers) as r:
+                        if r.status_code != 200:
+                            err_body = await r.aread()
+                            last_error = f"HTTP {r.status_code}: {err_body.decode()}"
+                            print(f"⚠️ Oracle Fallback: {model} failed with {last_error}")
+                            continue
+
+                        async for line in r.aiter_lines():
+                            if line.startswith("data:"):
+                                yield f"{line}\n\n"
+                        return # Success!
+            except Exception as e:
+                last_error = str(e)
+                print(f"⚠️ Oracle Fallback: {model} error: {last_error}")
+                continue
+
+        yield f"data: {json.dumps({'error': f'All AI models failed. Final error: {last_error}'})}\n\n"
+
+    return StreamingResponse(
+        stream(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff"
+        }
+    )
 
 
 # ── Communication Coach ───────────────────────────────────────────────────────
@@ -67,18 +124,28 @@ async def analyze_chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    result = analyze_communication(req.message)
-    session = CoachSession(
-        user_id=current_user.id,
-        content=req.message,
-        result_json=json.dumps(result)
-    )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    await manager.broadcast_to_user(current_user.id, get_live_metrics(current_user.id, db))
-    # Return full session shape so frontend history list updates immediately
-    return _session_to_dict(session)
+    try:
+        if not NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY is missing in the production environment.")
+
+        result = analyze_communication(req.message)
+        session = CoachSession(
+            user_id=current_user.id,
+            content=req.message,
+            result_json=json.dumps(result)
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        await manager.broadcast_to_user(current_user.id, get_live_metrics(current_user.id, db))
+        return _session_to_dict(session)
+    except Exception as e:
+        err_detail = str(e)
+        print(f"❌ Coach Analysis Error: {err_detail}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Analysis failed: {err_detail}", "error": err_detail, "suggestion": "Ensure NVIDIA_API_KEY is valid and has model permissions."}
+        )
 
 
 @router.get("/chat/history")
@@ -121,41 +188,52 @@ async def analyze_resume_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    from services.ai_service import _normalize_resume_result
+    try:
+        if not NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY is missing in the production environment.")
 
-    # ── Upsert: same filename → update existing record, no duplicate ─────────────
-    existing = db.query(ResumeAnalysis).filter(
-        ResumeAnalysis.user_id == current_user.id,
-        ResumeAnalysis.filename == file.filename,
-    ).first()
+        from services.ai_service import _normalize_resume_result
 
-    contents = await file.read()
-    text   = extract_text_from_image(contents, filename=file.filename)
-    result = analyze_resume(text)
+        # ── Upsert: same filename → update existing record, no duplicate ─────────────
+        existing = db.query(ResumeAnalysis).filter(
+            ResumeAnalysis.user_id == current_user.id,
+            ResumeAnalysis.filename == file.filename,
+        ).first()
 
-    if existing:
-        existing.result_json = json.dumps(result)
-        db.commit()
-        db.refresh(existing)
-        record = existing
-    else:
-        record = ResumeAnalysis(
-            user_id=current_user.id,
-            filename=file.filename,
-            result_json=json.dumps(result)
+        contents = await file.read()
+        text   = extract_text_from_image(contents, filename=file.filename)
+        result = analyze_resume(text)
+
+        if existing:
+            existing.result_json = json.dumps(result)
+            db.commit()
+            db.refresh(existing)
+            record = existing
+        else:
+            record = ResumeAnalysis(
+                user_id=current_user.id,
+                filename=file.filename,
+                result_json=json.dumps(result)
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+
+        await manager.broadcast_to_user(current_user.id, get_live_metrics(current_user.id, db))
+        return {
+            "id":         record.id,
+            "filename":   record.filename,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "result":     _normalize_resume_result(result),
+            **result,
+        }
+    except Exception as e:
+        err_detail = str(e)
+        print(f"❌ Resume Analysis Error: {err_detail}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Resume analysis failed: {err_detail}", "error": err_detail, "suggestion": "Ensure NVIDIA_API_KEY is valid and has model permissions."}
         )
-        db.add(record)
-        db.commit()
-        db.refresh(record)
-
-    await manager.broadcast_to_user(current_user.id, get_live_metrics(current_user.id, db))
-    return {
-        "id":         record.id,
-        "filename":   record.filename,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
-        "result":     _normalize_resume_result(result),
-        **result,
-    }
 
 
 

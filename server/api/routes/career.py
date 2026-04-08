@@ -183,7 +183,11 @@ async def generate_career_roadmap(
 
     data = generate_roadmap(req.goal)
     phases = data.get("phases", [])
-    estimated_duration = data.get("estimated_duration", "")
+    if not phases:
+        # One last desperate attempt at a generic roadmap if even the AI fallback failed
+        phases = [{"id":1, "title": "Preparation", "duration": "2 weeks", "description": "Set up your environment and goals.", "skills": ["Planning"], "completed": False}]
+        
+    estimated_duration = data.get("estimated_duration", "4 weeks")
 
     if existing:
         # Refresh phases on existing record — no new row

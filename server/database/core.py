@@ -7,7 +7,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_twin.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # database/
+PROJECT_ROOT = os.path.dirname(BASE_DIR)              # server/
+DEFAULT_DB_PATH = os.path.join(PROJECT_ROOT, "ai_twin.db")
+
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

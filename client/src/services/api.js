@@ -39,30 +39,30 @@ export const authAPI = {
 // ── Resume ────────────────────────────────────────────────────────────────────
 export const resumeAPI = {
   analyze: (file) => {
-    const form = new FormData()
-    form.append('file', file)
-    return api.post('/resume/analyze', form, {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/ai/resume/analyze', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  getHistory: () => api.get('/resume/history'),
-  delete: (id) => api.delete(`/resume/${id}`),
+  getHistory: () => api.get('/ai/resume/history'),
+  deleteAnalysis: (id) => api.delete(`/ai/resume/${id}`),
 }
 
 // ── Chat / Communication ──────────────────────────────────────────────────────
 export const chatAPI = {
-  analyze: (message) => api.post('/chat/analyze', { message }),
-  getHistory: () => api.get('/chat/history'),
-  delete: (id) => api.delete(`/chat/${id}`),
+  analyze: (message) => api.post('/ai/chat/analyze', { message }),
+  getHistory: () => api.get('/ai/chat/history'),
+  deleteAnalysis: (id) => api.delete(`/ai/chat/${id}`),
 }
 
 // ── Roadmap ───────────────────────────────────────────────────────────────────
 export const roadmapAPI = {
-  generate: (goal) => api.post('/roadmap/generate', { goal }),
-  getMy: () => api.get('/roadmap/my'),
+  generate: (goal) => api.post('/career/roadmap/generate', { goal }),
+  getMy: () => api.get('/career/roadmap/my'),
   updateProgress: (roadmapId, phaseId, completed) =>
-    api.post(`/roadmap/${roadmapId}/progress`, { phase_id: phaseId, completed }),
-  delete: (id) => api.delete(`/roadmap/${id}`),
+    api.post(`/career/roadmap/${roadmapId}/progress`, { phase_id: phaseId, completed }),
+  delete: (id) => api.delete(`/career/roadmap/${id}`),
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
@@ -72,13 +72,13 @@ export const dashboardAPI = {
 
 // ── Planner ───────────────────────────────────────────────────────────────────
 export const plannerAPI = {
-  today: () => api.get('/planner/today'),
-  week: () => api.get('/planner/week'),
-  add: (task) => api.post('/planner/add', task),
-  update: (id, task) => api.put(`/planner/${id}`, task),
-  delete: (id) => api.delete(`/planner/${id}`),
-  complete: (taskId, completed) => api.post('/planner/complete', { task_id: taskId, completed }),
-  regenerate: () => api.post('/planner/regenerate'),
+  today: () => api.get('/career/planner/today'),
+  week: () => api.get('/career/planner/week'),
+  add: (task) => api.post('/career/planner/add', task),
+  update: (id, task) => api.put(`/career/planner/${id}`, task),
+  delete: (id) => api.delete(`/career/planner/${id}`),
+  complete: (taskId, completed) => api.post('/career/planner/complete', { task_id: taskId, completed }),
+  regenerate: () => api.post('/career/planner/regenerate'),
 }
 
 export default api

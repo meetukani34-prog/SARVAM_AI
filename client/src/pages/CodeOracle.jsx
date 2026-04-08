@@ -33,7 +33,7 @@ function detectLanguage(code) {
 async function* streamCodeFix(code, language, signal) {
   const token = localStorage.getItem('ai_twin_token')
 
-  const response = await fetch('http://localhost:8000/api/oracle/refine', {
+  const response = await fetch('/api/ai/oracle/refine', {
     method: 'POST',
     signal,
     headers: {
@@ -57,15 +57,24 @@ async function* streamCodeFix(code, language, signal) {
     const { done, value } = await reader.read()
     if (done) break
     const chunk = decoder.decode(value)
-    const lines = chunk.split('\n').filter(l => l.startsWith('data: ') && l !== 'data: [DONE]')
+    
+    // Split on any combination of newlines (CRLF/LF)
+    const lines = chunk.split(/\r?\n/).filter(l => l.trim().startsWith('data:'))
     for (const line of lines) {
+      if (line.includes('[DONE]')) continue
       try {
-        const parsed = JSON.parse(line.slice(6))
+        const jsonStr = line.replace(/^data:\s*/, '').trim()
+        if (!jsonStr) continue
+        const parsed = JSON.parse(jsonStr)
         if (parsed.error) throw new Error(parsed.error)
-        const delta = parsed?.choices?.[0]?.delta?.content
-        if (delta) yield delta
+        let delta = parsed?.choices?.[0]?.delta?.content
+        if (delta) {
+          // Ignore heartbeat leading dot if it's the very first content
+          if (delta === '. ') continue
+          yield delta
+        }
       } catch (e) {
-        if (e.message.includes('error')) throw e
+        console.warn('SSE Parse Error:', e, line)
       }
     }
   }
@@ -106,7 +115,12 @@ function LuminousCodeBlock({ code, explanations, onCopy, copied }) {
 
 // ── Parse streaming output ─────────────────────────────────────────────────────
 function parseOracleOutput(raw) {
-  const [codePart, ...rest] = raw.split('--- EXPLANATIONS ---')
+  if (!raw) return { code: '', explanations: [] }
+  
+  // Strip common markdown code block markers if present
+  let cleanRaw = raw.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '')
+  
+  const [codePart, ...rest] = cleanRaw.split('--- EXPLANATIONS ---')
   const explanations = []
   if (rest.length > 0) {
     const expText = rest.join('')
@@ -116,13 +130,18 @@ function parseOracleOutput(raw) {
       explanations.push({ line: parseInt(m[1]), text: m[2].trim() })
     }
   }
-  return { code: codePart.trim(), explanations }
+
+  // If codePart is empty but raw has content, the AI might have flipped the structure
+  const cleanStripped = cleanRaw.replace(/^(Here is|Sure|I can help|Absolutely).+:\s*/i, '').trim()
+  const finalCode = codePart.trim() || cleanStripped
+  return { code: finalCode, explanations }
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function CodeOracle() {
   const [input, setInput]         = useState('')
   const [rawOutput, setRawOutput] = useState('')
+  const [bytesReceived, setBytesReceived] = useState(0)
   const [streaming, setStreaming] = useState(false)
   const [phase, setPhase]         = useState('idle') // idle | detecting | streaming | done | error
   const [error, setError]         = useState('')
@@ -154,6 +173,7 @@ export default function CodeOracle() {
     if (!input.trim() || streaming) return
 
     setRawOutput('')
+    setBytesReceived(0)
     setError('')
     setPhase('detecting')
     setStreaming(true)
@@ -168,6 +188,7 @@ export default function CodeOracle() {
 
       for await (const chunk of streamCodeFix(input, lang, abortRef.current.signal)) {
         setRawOutput(prev => prev + chunk)
+        setBytesReceived(prev => prev + chunk.length)
       }
 
       setPhase('done')
@@ -313,6 +334,11 @@ export default function CodeOracle() {
                     {phase === 'detecting'  && '🔍 Detecting language...'}
                     {phase === 'streaming'  && `${langInfo?.icon || '🤖'} Oracle Writing...`}
                     {phase === 'done'       && `✦ Refinement Complete`}
+                    {phase === 'streaming'  && (
+                      <span className="streaming-badge">
+                        ✦ Computing: {bytesReceived} bytes received
+                      </span>
+                    )}
                     {phase === 'error'      && '⚠️ Oracle Error'}
                   </span>
                   <span className={`panel-badge ${phase}`}>
@@ -336,15 +362,21 @@ export default function CodeOracle() {
                     </div>
                   )}
 
-                  {/* Streaming or Done */}
-                  {(phase === 'streaming' || phase === 'done') && parsedCode && (
+                  {/* Streaming or Done Content */}
+                  {(phase === 'streaming' || phase === 'done') && (rawOutput || parsedCode) && (
                     <>
-                      <LuminousCodeBlock
-                        code={parsedCode}
-                        explanations={explanations}
-                        onCopy={handleCopy}
-                        copied={copied}
-                      />
+                      {parsedCode ? (
+                        <LuminousCodeBlock
+                          code={parsedCode}
+                          explanations={explanations}
+                          onCopy={handleCopy}
+                          copied={copied}
+                        />
+                      ) : (
+                        <div className="oracle-raw-stream">
+                          <pre>{rawOutput}</pre>
+                        </div>
+                      )}
                       {phase === 'streaming' && <TypingCursor />}
                     </>
                   )}
@@ -369,21 +401,33 @@ export default function CodeOracle() {
                       ))}
                     </div>
                   )}
-
-                  {/* Error */}
-                  {phase === 'error' && (
-                    <div className="oracle-error-box">
-                      <div className="err-icon">⚠️</div>
-                      <div className="err-msg">{error}</div>
-                      <div className="err-hint">
-                        Make sure your NVIDIA NIM API key is valid and the endpoint is reachable.
-                      </div>
-                      <button className="oracle-btn ghost" onClick={() => { setPhase('idle'); setError('') }}>
-                        Dismiss
-                      </button>
-                    </div>
-                  )}
                 </div>
+
+                {/* Error Modal (Matching Photo 2) */}
+                {phase === 'error' && (
+                  <div className="oracle-modal-overlay">
+                    <div className="oracle-error-modal oracle-pulse-in">
+                      <div className="modal-header">
+                        <span className="modal-dots">
+                          <span style={{ background: '#ef4444' }} />
+                          <span style={{ background: '#f59e0b' }} />
+                        </span>
+                        <span className="modal-title">Oracle Error</span>
+                        <button className="modal-close" onClick={() => { setPhase('idle'); setError('') }}>×</button>
+                      </div>
+                      <div className="modal-body">
+                        <div className="err-icon">⚠️</div>
+                        <h2 className="err-title">{error || 'Method Not Allowed'}</h2>
+                        <div className="err-hint">
+                          Make sure your <b>NVIDIA_MLAT</b> key is valid and the endpoint is available.
+                        </div>
+                        <button className="oracle-btn primary" style={{ width: '100%', marginTop: '20px' }} onClick={() => { setPhase('idle'); setError('') }}>
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -641,9 +685,9 @@ export default function CodeOracle() {
         }
         .luminous-label { font-size: 0.7rem; font-weight: 800; color: var(--cyan); letter-spacing: 0.5px; }
         .oracle-copy-btn {
-          background: rgba(6,182,212,0.1);
-          border: 1px solid rgba(6,182,212,0.25);
-          color: var(--cyan);
+          background: var(--bg-secondary);
+          border: 1px solid var(--border);
+          color: var(--text-secondary);
           font-size: 0.7rem;
           font-weight: 700;
           padding: 4px 12px;
@@ -652,6 +696,14 @@ export default function CodeOracle() {
           transition: all 0.2s;
         }
         .oracle-copy-btn:hover { background: rgba(6,182,212,0.2); transform: scale(1.02); }
+        .oracle-output-body {
+          flex: 1;
+          overflow-y: auto;
+          background: #f1f5f9; /* SOLID LIGHT GREY FORCED */
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+        }
         .luminous-code { padding: 12px 0; overflow-x: auto; }
         .luminous-line {
           display: flex;
@@ -662,7 +714,7 @@ export default function CodeOracle() {
           cursor: default;
           transition: background 0.15s;
         }
-        .luminous-line:hover { background: rgba(255,255,255,0.03); }
+        .luminous-line:hover { background: rgba(6,182,212,0.06); }
         .luminous-line.has-tip { border-left: 2px solid var(--cyan); }
         .luminous-line.has-tip::after {
           content: attr(data-tip);
@@ -684,15 +736,23 @@ export default function CodeOracle() {
           box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
         .luminous-line.has-tip:hover::after { display: block; }
-        .luminous-ln { color: rgba(255,255,255,0.18); font-size: 0.72rem; min-width: 24px; text-align: right; user-select: none; font-family: monospace; }
-        .luminous-text { color: #e2e8f0; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.78rem; line-height: 1.8; white-space: pre; }
+        .luminous-ln { color: #94a3b8; opacity: 0.8; font-size: 0.72rem; min-width: 24px; text-align: right; user-select: none; font-family: monospace; }
+        .luminous-text { 
+           color: #ffffff !important; /* FORCED WHITE FOR VISIBILITY */
+           font-family: 'JetBrains Mono', 'Fira Code', monospace; 
+           font-size: 0.82rem; 
+           font-weight: 600;
+           line-height: 1.8; 
+           white-space: pre; 
+        }
+        .luminous-text * { color: inherit !important; }
         .luminous-tip-icon { color: var(--cyan); font-size: 0.6rem; margin-left: 4px; }
 
         /* ── Raw Stream ── */
         .oracle-raw-stream pre {
           font-family: 'JetBrains Mono', monospace;
           font-size: 0.78rem;
-          color: #e2e8f0;
+          color: var(--text-primary);
           white-space: pre-wrap;
           line-height: 1.7;
           margin: 0;
@@ -736,21 +796,69 @@ export default function CodeOracle() {
         }
         .exp-text { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
 
-        /* ── Error Box ── */
-        .oracle-error-box {
+        /* ── Error Modal (Photo 2 Alignment) ── */
+        .oracle-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15,23,42,0.4);
+          backdrop-filter: blur(8px);
           display: flex;
-          flex-direction: column;
           align-items: center;
-          gap: 12px;
-          padding: 40px 20px;
-          text-align: center;
-          border: 1px solid rgba(239,68,68,0.2);
-          border-radius: 12px;
-          background: rgba(239,68,68,0.04);
+          justify-content: center;
+          z-index: 1000;
+          animation: modal-fade-in 0.3s ease;
         }
-        .err-icon { font-size: 2rem; }
-        .err-msg { font-size: 0.85rem; color: #f87171; font-weight: 600; word-break: break-word; max-width: 400px; }
-        .err-hint { font-size: 0.78rem; color: var(--text-muted); max-width: 360px; line-height: 1.5; }
+        .oracle-error-modal {
+          background: var(--bg-elevated);
+          border: 1px solid rgba(239,68,68,0.2);
+          border-radius: 24px;
+          width: 90%;
+          max-width: 400px;
+          box-shadow: 0 20px 50px rgba(0,0,0,0.3), 0 0 30px rgba(239,115,22,0.15);
+          overflow: hidden;
+        }
+        .oracle-error-modal .modal-header {
+          padding: 14px 20px;
+          background: rgba(239,68,68,0.05);
+          border-bottom: 1px solid var(--border);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .modal-dots { display: flex; gap: 6px; }
+        .modal-dots span { width: 10px; height: 10px; border-radius: 50%; }
+        .modal-title { font-size: 0.8rem; font-weight: 800; color: var(--text-secondary); }
+        .modal-close { background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; line-height: 1; }
+        
+        .oracle-error-modal .modal-body {
+          padding: 32px 24px;
+          text-align: center;
+        }
+        .oracle-error-modal .err-icon {
+          font-size: 3rem;
+          margin-bottom: 16px;
+          animation: shake 0.5s ease-in-out;
+        }
+        .oracle-error-modal .err-title {
+          font-size: 1.25rem;
+          font-weight: 800;
+          margin-bottom: 8px;
+          color: var(--text-primary);
+        }
+        .oracle-error-modal .err-hint {
+          font-size: 0.85rem;
+          color: var(--text-secondary);
+          line-height: 1.6;
+        }
+        .oracle-error-modal b { color: var(--orange); }
+
+        @keyframes modal-fade-in { from{opacity:0} to{opacity:1} }
+        @keyframes oracle-pulse-in { from{transform:scale(0.9);opacity:0} to{transform:scale(1);opacity:1} }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
 
         /* ── Language Grid ── */
         .oracle-lang-grid {

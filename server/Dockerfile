@@ -30,3 +30,4 @@ EXPOSE 8000
 
 # Default command
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# REBUILD: 2026-04-06T11:21:00Z — env module restored

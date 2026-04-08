@@ -284,8 +284,8 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Google Login */}
-          {mode !== 'set-password' && (
+          {/* Google Login (Temporarily Commented Out as per user request)
+          {false && mode !== 'set-password' && (
             <div style={{ marginTop: '20px' }}>
               <div className="divider" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
@@ -307,6 +307,7 @@ export default function Login() {
               </div>
             </div>
           )}
+          */}
         </div>
 
         {/* Footer */}

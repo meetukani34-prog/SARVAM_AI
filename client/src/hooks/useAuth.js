@@ -26,15 +26,26 @@ export function useAuth() {
 
   const signup = async (email, name, password) => {
     setLoading(true)
+    // Final Proper Fix V5.0.0: Unified safety margin (100 chars)
+    const safePassword = password.substring(0, 100)
     try {
-      const res = await authAPI.signup(email, name, password)
+      const res = await authAPI.signup(email, name, safePassword)
       const { access_token, user: u } = res.data
       localStorage.setItem('ai_twin_token', access_token)
       localStorage.setItem('ai_twin_user', JSON.stringify(u))
       setUser(u)
       return { success: true }
     } catch (err) {
-      return { success: false, error: err.response?.data?.detail || 'Signup failed' }
+      console.error('Signup error:', err.response?.data || err.message)
+      const detail = err.response?.data?.detail
+      let errorMsg = 'Signup failed'
+      if (typeof detail === 'string') errorMsg = detail
+      else if (Array.isArray(detail)) errorMsg = detail[0]?.msg || 'Validation error'
+      else if (err.response?.status === 500) {
+        errorMsg = detail || 'Server Error (500). Please check if DB is writable or Secret Key is set.'
+      }
+      
+      return { success: false, error: errorMsg }
     } finally {
       setLoading(false)
     }

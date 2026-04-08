@@ -267,7 +267,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user?.id) return
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//localhost:8000/ws/analytics/${user.id}`)
+    const host = window.location.host
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${wsProtocol}//${host}/ws/analytics/${user.id}`)
     ws.onmessage = e => { try { setData(prev => ({ ...prev, ...JSON.parse(e.data) })) } catch {} }
     socketRef.current = ws
     return () => ws.close()
@@ -304,12 +306,18 @@ export default function Dashboard() {
         <CardTitle sub="Weighted aggregate across Resume · Coach · Planner · Roadmap">
           🎯 Overall Performance
         </CardTitle>
-        <div style={{ display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: 20 }}>
-          <RadialGauge score={d.overall_score        || 0} color="#6366f1" label="Overall"   icon="🏆" size={130} />
-          <RadialGauge score={d.resume_score         || 0} color="#8b5cf6" label="Resume"    icon="📄" size={130} />
-          <RadialGauge score={d.communication_score  || 0} color="#06b6d4" label="Coach IQ"  icon="💬" size={130} />
-          <RadialGauge score={d.planner_score        || 0} color="#f59e0b" label="Planner"   icon="📅" size={130} />
-          <RadialGauge score={d.roadmap_score        || 0} color="#10b981" label="Roadmap"   icon="🗺️" size={130} />
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          flexWrap: 'wrap', 
+          gap: '24px 20px',
+          padding: '10px 0'
+        }}>
+          <RadialGauge score={d.overall_score        || 0} color="#6366f1" label="Overall"   icon="🏆" size={120} />
+          <RadialGauge score={d.resume_score         || 0} color="#8b5cf6" label="Resume"    icon="📄" size={120} />
+          <RadialGauge score={d.communication_score  || 0} color="#06b6d4" label="Coach IQ"  icon="💬" size={120} />
+          <RadialGauge score={d.planner_score        || 0} color="#f59e0b" label="Planner"   icon="📅" size={120} />
+          <RadialGauge score={d.roadmap_score        || 0} color="#10b981" label="Roadmap"   icon="🗺️" size={120} />
         </div>
       </Card>
 
@@ -327,7 +335,7 @@ export default function Dashboard() {
 
         <Card>
           <CardTitle sub="Click any card to open that module">⚡ Module Scores</CardTitle>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="grid-2 responsive-grid" style={{ gap: '12px' }}>
             <ModuleCard icon="📄" label="Resume"   score={d.resume_score        || 0} color="#8b5cf6" sublabel="Latest scan score"    path="/resume" />
             <ModuleCard icon="💬" label="Coach IQ" score={d.communication_score  || 0} color="#06b6d4" sublabel="Avg confidence"       path="/coach" />
             <ModuleCard icon="📅" label="Planner"  score={d.planner_score        || 0} color="#f59e0b" sublabel="Tasks completed"      path="/planner" />

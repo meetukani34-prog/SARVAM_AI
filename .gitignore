@@ -1,8 +1,7 @@
 # Dependencies
 node_modules/
 client/node_modules/
-server/env/
-server/__pycache__/
+**/__pycache__/
 *.pyc
 
 # Environment & Secrets

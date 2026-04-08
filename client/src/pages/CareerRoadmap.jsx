@@ -38,14 +38,6 @@ export default function CareerRoadmap() {
     e?.preventDefault()
     if (!goal.trim()) return
 
-    // ── If we already have this roadmap, just open it — no AI call ──────────────
-    const goalLower = goal.trim().toLowerCase()
-    const alreadySaved = savedMaps.find(m => m.goal.toLowerCase() === goalLower)
-    if (alreadySaved) {
-      setRoadmap(alreadySaved)
-      return
-    }
-
     setLoading(true); setError('')
     try {
       const r = await roadmapAPI.generate(goal.trim())
@@ -126,10 +118,25 @@ export default function CareerRoadmap() {
             </button>
           ))}
         </div>
-        <form onSubmit={generate} style={{ display:'flex', gap:'12px' }}>
-          <input id="goal-input" className="input" placeholder="Or type a custom role (e.g. 'Blockchain Developer')…" value={goal} onChange={e => setGoal(e.target.value)} style={{ flex:1 }}/>
-          <button id="generate-roadmap-btn" type="submit" className="btn btn-primary" disabled={!goal.trim()||loading} style={{ whiteSpace:'nowrap', padding:'12px 24px' }}>
-            {loading ? <><span className="spinner spinner-sm"/> Generating…</> : '✨ Generate Roadmap'}
+        <form onSubmit={generate} className="roadmap-gen-form">
+          <input 
+            id="goal-input" 
+            className="input roadmap-gen-input" 
+            placeholder="Target role (e.g. 'Data Scientist')…"
+            value={goal} 
+            onChange={e => setGoal(e.target.value)} 
+          />
+          <button 
+            id="generate-roadmap-btn" 
+            type="submit" 
+            className="btn btn-primary roadmap-gen-btn" 
+            disabled={!goal.trim()||loading} 
+          >
+            {loading ? (
+              <><span className="spinner spinner-sm" style={{ marginRight:'8px' }}/> Generating…</>
+            ) : (
+              <><span style={{ fontSize:'1.1rem', marginRight:'8px' }}>✨</span> Generate Roadmap</>
+            )}
           </button>
         </form>
         {error && <div className="alert alert-error anim-fade" style={{ marginTop:'14px' }}>⚠️ {error}</div>}

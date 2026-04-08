@@ -18,8 +18,14 @@ export default function ChatCoach() {
   const fetchHistory = React.useCallback(async () => {
     try {
       const r = await chatAPI.getHistory()
-      setHistory(r.data || [])
-    } catch { /* silent */ }
+      if (r.data && Array.isArray(r.data)) {
+        setHistory(r.data)
+      } else {
+        setHistory([])
+      }
+    } catch { 
+      setHistory([])
+    }
   }, [])
 
   useEffect(() => {
@@ -31,7 +37,7 @@ export default function ChatCoach() {
     if (e) e.stopPropagation()
     if (!window.confirm('Delete this coaching session?')) return
     try {
-      await chatAPI.delete(id)
+      await chatAPI.deleteAnalysis(id)
       setHistory(prev => prev.filter(h => h.id !== id))
       if (result?.id === id) setResult(null)
     } catch { alert('Failed to delete') }

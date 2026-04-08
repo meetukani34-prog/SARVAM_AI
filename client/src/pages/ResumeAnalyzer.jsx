@@ -16,8 +16,14 @@ export default function ResumeAnalyzer() {
   const fetchHistory = useCallback(async () => {
     try {
       const r = await resumeAPI.getHistory()
-      setHistory(r.data || [])
-    } catch { /* silent fail */ }
+      if (r.data && Array.isArray(r.data)) {
+        setHistory(r.data)
+      } else {
+        setHistory([])
+      }
+    } catch { 
+      setHistory([])
+    }
   }, [])
 
   useEffect(() => {
@@ -106,8 +112,7 @@ export default function ResumeAnalyzer() {
         <p className="page-subtitle">Premium SARVAM-powered diagnostics for your technical career.</p>
       </div>
 
-      <div className="responsive-grid cols-sidebar" style={{ 
-        gridTemplateColumns: result ? '280px 1fr 1.4fr' : '300px 1fr', 
+      <div className={`responsive-grid ${result ? 'cols-3-special' : 'cols-sidebar'}`} style={{ 
         transition: 'all 0.5s var(--ease)' 
       }}>
 
@@ -240,7 +245,7 @@ export default function ResumeAnalyzer() {
             {/* Score Rings Dashboard */}
             <div className="cloud-card" style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', justifyContent: 'space-around', alignItems: 'center' }}>
               <div style={{ textAlign: 'center' }}>
-                <ScoreRing score={result.overall_score} size={150} label="OVERALL" strokeWidth={12} color="var(--purple)" />
+                <ScoreRing score={result.overall_score || 0} size={150} label="OVERALL" strokeWidth={12} color="var(--purple)" />
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {Object.entries(result.skill_categories || {}).map(([key, val]) => (
@@ -270,7 +275,7 @@ export default function ResumeAnalyzer() {
             </div>
 
             {/* Growth Gaps & Roadmap */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div className="grid-2" style={{ gap: '20px' }}>
               <div className="glass-card" style={{ padding: '20px' }}>
                 <h3 style={{ fontSize: '0.8rem', fontWeight: '800', marginBottom: '12px', color: 'var(--red)' }}>GROWTH GAPS</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
