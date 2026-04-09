@@ -63,7 +63,9 @@ def run_mission(orbit: Orbit):
             prev_reward = reward.momentum_total
             
         except Exception as e:
-            print(f"ERROR {e}")
+            import traceback
+            print(f"ERROR: Exception during inference loop at Step {obs.step}: {e}")
+            print(traceback.format_exc())
             break
 
     grader_report = env.grade().get("report", "No report")

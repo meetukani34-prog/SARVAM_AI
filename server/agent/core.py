@@ -65,15 +65,19 @@ class BaselinePolicy:
         self.planner = DriftingPlanner()
         self.client = None
         
-        # Gracefully handle missing API keys for validation/testing
+        # Gracefully handle missing API keys or initialization errors for validation/testing
         api_key = os.getenv("NVIDIA_API_KEY")
         if api_key:
-            self.client = OpenAI(
-                api_key=api_key,
-                base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
-            )
+            try:
+                self.client = OpenAI(
+                    api_key=api_key,
+                    base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
+                )
+            except Exception as e:
+                print(f"[Core] OpenAI Initialization Failed: {e}")
+                self.client = None
         else:
-            pass
+            print("[Core] NVIDIA_API_KEY not found. Operating in Deterministic/Fallback mode.")
 
     def select_action(self, obs: ObservationModel, info: Dict[str, Any]) -> ActionModel:
         """Call the LLM to decide the next kinetic drift."""
@@ -108,28 +112,37 @@ class BaselinePolicy:
                 note="DETERMINISTIC_FALLBACK"
             )
 
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": "You are the SARVAM Baseline Agent. Respond with JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.0, # Target reproducibility
-            response_format={"type": "json_object"}
-        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": "You are the SARVAM Baseline Agent. Respond with JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0, # Target reproducibility
+                response_format={"type": "json_object"}
+            )
 
-        raw_json = response.choices[0].message.content
-        data = json.loads(raw_json)
-        
-        # Return action based on LLM reasoning
-        
-        return ActionModel(
-            action_type=ActionType(data["action_type"].lower()),
-            target_metric=TargetMetric(data["target_metric"].lower()),
-            intensity=Intensity(data.get("intensity", "moderate").lower()),
-            duration_mins=data.get("duration_mins", 30),
-            note=data.get("reasoning")
-        )
+            raw_json = response.choices[0].message.content
+            data = json.loads(raw_json)
+            
+            # Return action based on LLM reasoning with safe Enum mapping
+            return ActionModel(
+                action_type=ActionType(data["action_type"].lower()),
+                target_metric=TargetMetric(data["target_metric"].lower()),
+                intensity=Intensity(data.get("intensity", "moderate").lower()),
+                duration_mins=data.get("duration_mins", 30),
+                note=data.get("reasoning")
+            )
+        except Exception as e:
+            print(f"[Core] LLM Action Selection failed: {e}. Falling back.")
+            return ActionModel(
+                action_type=ActionType.SCHEDULE_DEEP_WORK,
+                target_metric=TargetMetric.FOCUS,
+                intensity=Intensity.MODERATE,
+                duration_mins=45,
+                note="ERROR_FALLBACK: " + str(e)
+            )
 
 class AgentMemory:
     """The 'Experience Replay' — tracks the trajectory of kinetic drifts."""
@@ -162,6 +175,6 @@ class AgentReasoning:
             return 0.0
         similarity = difflib.SequenceMatcher(None, current_note.lower(), previous_note.lower()).ratio()
         if similarity > 0.9:
-            print(f"⚠️ [Reasoning] High similarity ({similarity:.2f}) detected.")
+            print(f"[Reasoning] High similarity ({similarity:.2f}) detected.")
             return -0.2
         return 0.0
