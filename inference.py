@@ -28,7 +28,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")  # Optional
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Optional
 
 def run_mission(orbit: Orbit):
-    print("START")
+    print(f"[START] task={orbit.name}", flush=True)
     session_id = f"inference-{uuid.uuid4().hex[:8]}"
     env = SarvamEnv(session_id=session_id)
     policy = BaselinePolicy(model_name=MODEL_NAME)
@@ -49,7 +49,7 @@ def run_mission(orbit: Orbit):
             obs, info = next_obs, next_info
             memory.log(obs.step, action, obs, reward)
             
-            print(f"STEP {obs.step} {reward.momentum_total} {reward.cumulative_reward}")
+            print(f"[STEP] step={obs.step} momentum={reward.momentum_total} reward={reward.cumulative_reward}", flush=True)
             
             if reward.cumulative_reward >= 1.2:
                 done = True
@@ -57,7 +57,7 @@ def run_mission(orbit: Orbit):
 
             if done:
                 status = "OK" if info.get('mission_success') else "FAIL"
-                print(f"END {status}")
+                print(f"[END] status={status} task={orbit.name} score={reward.cumulative_reward} steps={obs.step}", flush=True)
                 break
             
             prev_reward = reward.momentum_total
