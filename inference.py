@@ -21,8 +21,8 @@ from agent.core import BaselinePolicy, AgentMemory
 
 load_dotenv()
 
-# Environment variables - defaults only for API_BASE_URL and MODEL_NAME
-API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
+# Environment variables - defaults for validator proxy alignment
+API_BASE_URL = os.getenv("API_BASE_URL") or os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "meta/llama-3.1-8b-instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")  # Optional
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Optional

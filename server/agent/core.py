@@ -65,19 +65,21 @@ class BaselinePolicy:
         self.planner = DriftingPlanner()
         self.client = None
         
-        # Gracefully handle missing API keys or initialization errors for validation/testing
-        api_key = os.getenv("NVIDIA_API_KEY")
+        # Prioritize API_KEY and API_BASE_URL injected by the validator
+        api_key = os.getenv("API_KEY") or os.getenv("NVIDIA_API_KEY")
+        base_url = os.getenv("API_BASE_URL") or os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
+        
         if api_key:
             try:
                 self.client = OpenAI(
                     api_key=api_key,
-                    base_url=os.getenv("BASE_URL", "https://integrate.api.nvidia.com/v1")
+                    base_url=base_url
                 )
             except Exception as e:
                 print(f"[Core] OpenAI Initialization Failed: {e}")
                 self.client = None
         else:
-            print("[Core] NVIDIA_API_KEY not found. Operating in Deterministic/Fallback mode.")
+            print("[Core] API_KEY not found. Operating in Deterministic/Fallback mode.")
 
     def select_action(self, obs: ObservationModel, info: Dict[str, Any]) -> ActionModel:
         """Call the LLM to decide the next kinetic drift."""
